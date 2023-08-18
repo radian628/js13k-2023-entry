@@ -1,0 +1,2 @@
+#version 300 es
+precision highp float;in vec2 d;layout(location=0)out vec4 fields;layout(location=1)out vec4 color;void main() {fields=vec4(0.,0.,0.,1.);color=vec4(sin(d.y*20.) *0.45+cos(d.x*14.) *0.45,0.,0.,1.);}

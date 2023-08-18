@@ -1,0 +1,2 @@
+#version 300 es
+precision highp float;in vec2 d;uniform sampler2D fields;out vec4 j;vec4 g(vec2 offset) {float i=1./float(textureSize(fields,0).x);return texture(fields,d+offset*i);}void main() {vec4 c=texture(fields,d);vec2 k=c.xy;j=vec4(c.xyz, (c.z+g(vec2(2.,0.)).w+g(vec2(-2.,0.)).w+g(vec2(0.,2.)).w+g(vec2(0.,-2.)).w) /4.);}

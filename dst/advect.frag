@@ -1,0 +1,2 @@
+#version 300 es
+precision highp float;in vec2 d;uniform sampler2D fields;const float b=0.01;out vec4 advected_fields;void main() {vec4 c=texture(fields,d);vec2 a=c.xy;vec2 advected_vel=texture(fields,d-a*b).xy;advected_fields=vec4(advected_vel,c.zw);}
