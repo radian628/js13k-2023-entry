@@ -26,10 +26,14 @@ const float rho = 1.0;
 uniform vec2 force_pos;
 uniform vec2 force_vec;
 
+const float force_size = 0.01;
+
+uniform int gust_type;
+
 void main() {
     vec4 params = texture(fields, pos);
 
-    float force_factor = 20.0 * max(0.0, 0.05 - dot(force_pos - pos, force_pos - pos));
+    float force_factor = (1.0 / force_size) * max(0.0, force_size - dot(force_pos - pos, force_pos - pos));
 
     vec2 vel = params.xy - delta_t / (2.0 * rho * epsilon)
         * vec2(
@@ -37,12 +41,30 @@ void main() {
             vel_at(vec2(0.0, 1.0)).w - vel_at(vec2(0.0, -1.0)).w
         ) + force_factor * force_vec * delta_t;
 
-    vel *= pow(0.9, delta_t);
+    vel *= pow(0.99, delta_t);
 
-    vec4 advected_color_temp = texture(color, pos - vel * delta_t);
+    vec4 advected_color_temp = texture(color, pos - vel * delta_t * 0.5);
 
-    advected_color = advected_color_temp * pow(0.8, delta_t)
-         + vec4(vec3(10.0), 0.0) * pow(force_factor, 5.0) * delta_t * abs(sign(force_vec)).x;
+    advected_color_temp = vec4(
+        advected_color_temp.x * pow(1.0, delta_t),
+        advected_color_temp.y * pow(0.9, delta_t),
+        advected_color_temp.z * pow(0.9, delta_t) 
+            + length(vel) * 0.01 * advected_color_temp.x,
+        advected_color_temp.w
+    );
+
+    float more_clouds 
+        = max(0.0, pow(force_factor, 3.0)) * abs(sign(force_vec)).x * 0.3;
+
+    advected_color_temp.x = 
+        advected_color_temp.x + more_clouds > 0.4
+        ? max(0.4, advected_color_temp.x) 
+        : advected_color_temp.x 
+            + more_clouds,
+        
+    
+
+    advected_color = advected_color_temp;
 
     final_fields = 
         vec4(
