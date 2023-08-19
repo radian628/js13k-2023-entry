@@ -8,7 +8,27 @@
         "type": "jp-ship"
       },
       {
+        "x": 10,
+        "y": 12,
+        "type": "jp-ship"
+      },
+      {
+        "x": 6,
+        "y": 12,
+        "type": "jp-ship"
+      },
+      {
         "x": 2,
+        "y": 2,
+        "type": "mn-cannon-ship"
+      },
+      {
+        "x": 6,
+        "y": 2,
+        "type": "mn-cannon-ship"
+      },
+      {
+        "x": 9,
         "y": 2,
         "type": "mn-cannon-ship"
       }

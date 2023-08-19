@@ -13,6 +13,6 @@ void main() {
     color = vec4(
         sin(pos.y * 20.0) * 0.45 + cos(pos.x * 14.0) * 0.45,
         0.0, 0.0,
-        1.0
+        0.0
     );
 }

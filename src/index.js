@@ -271,6 +271,7 @@ async function setupFluid() {
   let time = 0;
 
   function drawMesh(index, x, y, scale, angle, drawMode = 0) {
+    if (typeof scale === "number") scale = [scale, scale, scale];
     gl.uniformMatrix4fv(gl.getUniformLocation(shader3D, "vp"), false, [
       1,
       0,
@@ -295,17 +296,17 @@ async function setupFluid() {
       gl.enableVertexAttribArray(0);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, assets[index][1]);
       gl.uniformMatrix4fv(gl.getUniformLocation(shader3D, "m"), false, [
-        Math.cos(angle) * scale,
+        Math.cos(angle) * scale[0],
         0,
-        Math.sin(angle) * scale,
-        0,
-        0,
-        1 * scale * (i === 1 ? 0 : 1),
+        Math.sin(angle) * scale[0],
         0,
         0,
-        -Math.sin(angle) * scale,
+        1 * scale[1] * (i === 1 ? 0 : 1),
         0,
-        Math.cos(angle) * scale,
+        0,
+        -Math.sin(angle) * scale[2],
+        0,
+        Math.cos(angle) * scale[2],
         0,
         x,
         0,
@@ -317,6 +318,14 @@ async function setupFluid() {
         i === 0 ? drawMode : 1
       );
       gl.drawElements(gl.TRIANGLES, assets[index][2], gl.UNSIGNED_BYTE, 0);
+    }
+  }
+
+  function drawWrapMesh(index, x, y, ...params) {
+    for (let dx = -2; dx < 4; dx += 2) {
+      for (let dy = -2; dy < 4; dy += 2) {
+        drawMesh(index, x + dx, y + dy, ...params);
+      }
     }
   }
 
@@ -386,8 +395,8 @@ async function setupFluid() {
       1 - mousePosOnLastClick[1] / window.innerHeight,
     ]);
     gl.uniform2fv(gl.getUniformLocation(finalShader, "force_vec"), [
-      gustDir[0] * 0.1,
-      -gustDir[1] * 0.1,
+      gustDir[0] * 0.5,
+      -gustDir[1] * 0.5,
     ]);
     gustDir = [0, 0];
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -411,18 +420,24 @@ async function setupFluid() {
           gl.getUniformLocation(circleShader, "force_factor"),
           exploding ? 1.0 : 0
         );
-        gl.uniform3f(
+        gl.uniform2f(
           gl.getUniformLocation(circleShader, "circle"),
           unit.x,
-          unit.y,
-          exploding ? 0.04 : 0.004
+          unit.y
+        );
+        gl.uniform4f(
+          gl.getUniformLocation(circleShader, "radii"),
+          0,
+          exploding ? 0.03 : 0.004,
+          0,
+          exploding ? 0.05 : 0
         );
         gl.uniform4f(
           gl.getUniformLocation(circleShader, "colors_change"),
           0,
           exploding ? 1 : 0.3,
           0,
-          0
+          exploding ? 1 : 0
         );
         gl.drawArrays(gl.TRIANGLES, 0, 6);
         swapRenderTargets();
@@ -438,23 +453,31 @@ async function setupFluid() {
     gl.clearColor(0.7, 0.75, 0.85, 0.0);
     gl.clearDepth(1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    // drawMesh(1, 0.2, 0.4, 0.3, time * 0.5);
-    // drawMesh(1, -0.2, -0.3, 0.2, time * 0.3);
     for (const unit of gameState.units) {
       // console.log(unit.t);
       if (meshTable[unit.t] === undefined) continue;
 
       const x = unit.x * 2 - 1;
       const y = unit.y * 2 - 1;
-      drawMesh(meshTable[unit.t], x, y, scaleTable[unit.t], unit.r);
+      drawWrapMesh(meshTable[unit.t], x, y, scaleTable[unit.t], unit.r);
       switch (unit.t) {
         case UNIT_JP_SHIP:
         case UNIT_JP_BOARDING_SHIP:
-          drawMesh(3, x, y, 0.2, 0, 3);
+          drawWrapMesh(3, x, y, 0.2, 0, 3);
           break;
         case UNIT_MN_SHIP:
         case UNIT_MN_CANNON_SHIP:
-          drawMesh(3, x, y, 0.2, 0, 4);
+          drawWrapMesh(3, x, y, 0.2, 0, 4);
+      }
+      if (unit.mhp) {
+        drawWrapMesh(
+          4,
+          x,
+          y - 0.15,
+          [(unit.hp / unit.mhp) * 0.1, 0.1, 0.1],
+          0,
+          5
+        );
       }
     }
     if (isMouseDown) {
@@ -555,7 +578,6 @@ const meshTable = {
   [UNIT_MN_CANNON_SHIP]: 1,
   [UNIT_JP_ARROW]: 2,
   [UNIT_MN_ARROW]: 2,
-  [UNIT_MN_BOMB]: 2,
 };
 
 const scaleTable = {
@@ -735,6 +757,38 @@ let screens = [
                 thisUnit.dx += Math.cos(dir) * 0.0005;
                 thisUnit.dy += Math.sin(dir) * 0.0005;
                 break;
+              case UNIT_JP_ARROW:
+                if (
+                  [UNIT_MN_SHIP, UNIT_MN_CANNON_SHIP].indexOf(otherUnit.t) ===
+                  -1
+                )
+                  break;
+
+                if (dist < 0.07 && thisUnit.hp > 1) {
+                  thisUnit.hp = 1;
+                  otherUnit.hp -= 10;
+                }
+                break;
+              case UNIT_MN_ARROW:
+              case UNIT_MN_BOMB:
+                if (
+                  [UNIT_JP_SHIP, UNIT_JP_BOARDING_SHIP].indexOf(otherUnit.t) ===
+                  -1
+                )
+                  break;
+
+                if (dist < 0.07 && thisUnit.hp > 2) {
+                  thisUnit.hp = 2;
+                  otherUnit.hp -= 10;
+                }
+
+                if (thisUnit.hp == 1) {
+                  if (dist < 0.2) {
+                    otherUnit.hp -= 5;
+                  }
+                }
+
+                break;
             }
           }
 
@@ -744,6 +798,11 @@ let screens = [
             case UNIT_MN_ARROW:
               thisUnit.hp--;
           }
+
+          const mod = (x, n) => x - Math.floor(x / n) * n;
+
+          thisUnit.x = mod(thisUnit.x, 1);
+          thisUnit.y = mod(thisUnit.y, 1);
 
           const pixelRef =
             (Math.floor(thisUnit.x * 128) +

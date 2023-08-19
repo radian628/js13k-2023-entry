@@ -50,11 +50,11 @@ void main() {
         advected_color_temp.y * pow(0.9, delta_t),
         advected_color_temp.z * pow(0.9, delta_t) 
             + length(vel) * 0.01 * advected_color_temp.x,
-        advected_color_temp.w
+        advected_color_temp.w * pow(0.7, delta_t)
     );
 
     float more_clouds 
-        = max(0.0, pow(force_factor, 3.0)) * abs(sign(force_vec)).x * 0.3;
+        = max(0.0, pow(force_factor, 3.0)) * abs(sign(force_vec)).x * 0.5;
 
     advected_color_temp.x = 
         advected_color_temp.x + more_clouds > 0.4

@@ -1,6 +1,6 @@
 import { typeMap } from "./build.mjs";
 
-const modelOrder = ["jp-boarding-ship", "mn-ship", "arrow", "flag"];
+const modelOrder = ["jp-boarding-ship", "mn-ship", "arrow", "flag", "bar"];
 
 function parseSingleObj(src) {
   const name = src.match(/o [\w-]+/)[0].slice(2);

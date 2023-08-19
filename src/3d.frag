@@ -58,5 +58,9 @@ void main() {
                 discard;
             }
         }
+
+    // health bar
+    } else if (mode == 5) {
+        col = vec4(0.3, 0.8, 0.2, f_vpos.y);
     }
 }

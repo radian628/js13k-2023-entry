@@ -82,6 +82,10 @@ void main() {
     base_color = mix(base_color, vec3(0.0, 0.0, 0.2), 
             clamp((atmos_data.x + 0.5) * 0.3 + atmos_data.y, 0.0, 1.0));
 
+    // explosion
+    base_color = mix(base_color, vec3(1.0, 0.5, 0.2), 
+            clamp(quantized_atmos_data(pos - vec2(0.002, 0.006), 0.05).w, 0.0, 1.0));
+
     // smoke
     base_color = mix(base_color, vec3(0.25, 0.21, 0.2), 
         clamp( quantized_atmos_data(pos - vec2(0.01, 0.03), 0.05).y * 1.5, 0.0, 1.0));
