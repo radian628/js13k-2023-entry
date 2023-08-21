@@ -43,15 +43,20 @@ void main() {
 
     vel *= pow(0.99, delta_t);
 
+
+
     vec4 advected_color_temp = texture(color, pos - vel * delta_t * 0.5);
+    
+    vel *= pow(max(advected_color_temp.w - 0.2, 0.0) * 0.75 + 1.0, delta_t);
 
     advected_color_temp = vec4(
         advected_color_temp.x * pow(1.0, delta_t),
         advected_color_temp.y * pow(0.9, delta_t),
         advected_color_temp.z * pow(0.9, delta_t) 
             + length(vel) * 0.01 * advected_color_temp.x,
-        advected_color_temp.w * pow(0.7, delta_t)
+        advected_color_temp.w * pow(0.3, delta_t)
     );
+
 
     float more_clouds 
         = max(0.0, pow(force_factor, 3.0)) * abs(sign(force_vec)).x * 0.5;

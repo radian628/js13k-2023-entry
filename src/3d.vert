@@ -7,6 +7,7 @@ uniform mat4 m;
 in vec3 i_vpos;
 
 out vec3 f_vpos;
+out vec3 original_vpos;
 
 uniform sampler2D fields;
 
@@ -24,5 +25,6 @@ void main() {
 
     vec4 transformed = vp * m * vpos;
     gl_Position = transformed;
-    f_vpos = i_vpos.xyz;
+    f_vpos = (m * vpos).xyz;
+    original_vpos = i_vpos;
 }

@@ -1,5 +1,12 @@
+let fluidDomainWidth = 480;
+let fluidDomainHeight = 270;
+let fluidTransferBufferSize = 128;
+
 async function fetchText(href) {
-  return (await await fetch(href)).text();
+  return (await (await fetch(href)).text()).replace(
+    /\/\*PERLIN\*\//g,
+    await (await fetch("perlin.frag")).text()
+  );
 }
 
 function checkShader(gl, shader, filename) {
@@ -135,8 +142,8 @@ async function loadAssets(gl) {
 async function setupFluid() {
   const canvas = document.createElement("canvas");
   canvas.id = "fluid-canvas";
-  canvas.width = 1024;
-  canvas.height = 1024;
+  canvas.width = 1920;
+  canvas.height = 1080;
   const gl = canvas.getContext("webgl2", { antialias: false });
   console.log(gl.getExtension("EXT_color_buffer_float"));
   console.log(gl.getExtension("OES_texture_float_linear"));
@@ -149,8 +156,6 @@ async function setupFluid() {
   gl.bindVertexArray(vao);
 
   const assets = await loadAssets(gl);
-
-  console.log(assets);
 
   const shader3D = await createShaders(gl, "3d.vert", "3d.frag");
   const [
@@ -175,46 +180,62 @@ async function setupFluid() {
     ].map((fshader) => createShaders(gl, "blit.vert", fshader))
   );
 
-  let srcFb = setupFramebuffer(gl, canvas.width, canvas.height);
-  let dstFb = setupFramebuffer(gl, canvas.width, canvas.height);
-  let pixelDataFb = setupFramebuffer(gl, 128, 128);
+  let srcFb = setupFramebuffer(gl, fluidDomainWidth, fluidDomainHeight);
+  let dstFb = setupFramebuffer(gl, fluidDomainWidth, fluidDomainHeight);
+  let pixelDataFb = setupFramebuffer(
+    gl,
+    fluidTransferBufferSize,
+    fluidTransferBufferSize
+  );
 
-  const renderLayerFramebuffer = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, renderLayerFramebuffer);
-  const renderLayerTexture = setupTexture(
-    gl,
-    canvas.width,
-    canvas.height,
-    gl.RGBA,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE
-  );
-  gl.framebufferTexture2D(
-    gl.FRAMEBUFFER,
-    gl.COLOR_ATTACHMENT0,
-    gl.TEXTURE_2D,
-    renderLayerTexture,
-    0
-  );
-  const renderLayerDepth = setupTexture(
-    gl,
-    canvas.width,
-    canvas.height,
-    gl.DEPTH_COMPONENT16,
-    gl.DEPTH_COMPONENT,
-    gl.UNSIGNED_SHORT
-  );
-  gl.framebufferTexture2D(
-    gl.FRAMEBUFFER,
-    gl.DEPTH_ATTACHMENT,
-    gl.TEXTURE_2D,
-    renderLayerDepth,
-    0
-  );
+  let renderLayerFramebuffer;
+  let renderLayerDepth;
+  let renderLayerTexture;
+
+  const resize = () => {
+    canvas.width = Math.min(window.innerWidth, (window.innerHeight * 16) / 9);
+    canvas.height = (canvas.width * 9) / 16;
+    renderLayerFramebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, renderLayerFramebuffer);
+    renderLayerTexture = setupTexture(
+      gl,
+      canvas.width,
+      canvas.height,
+      gl.RGBA,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE
+    );
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      renderLayerTexture,
+      0
+    );
+    renderLayerDepth = setupTexture(
+      gl,
+      canvas.width,
+      canvas.height,
+      gl.DEPTH_COMPONENT16,
+      gl.DEPTH_COMPONENT,
+      gl.UNSIGNED_SHORT
+    );
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.DEPTH_ATTACHMENT,
+      gl.TEXTURE_2D,
+      renderLayerDepth,
+      0
+    );
+  };
+
+  window.addEventListener("resize", resize);
+  resize();
 
   const buf = createSquareBuffer(gl);
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, srcFb.fb);
+  gl.viewport(0, 0, fluidDomainWidth, fluidDomainHeight);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -240,7 +261,7 @@ async function setupFluid() {
   let mousePosOnLastClick = [0, 0];
 
   canvas.addEventListener("mousemove", (e) => {
-    mousePos = [e.offsetX, e.offsetY];
+    mousePos = [e.offsetX / canvas.width, e.offsetY / canvas.height];
   });
 
   let isMouseDown = false;
@@ -250,7 +271,7 @@ async function setupFluid() {
     //if (e.button === 0) {
     lastButton = e.button;
     isMouseDown = true;
-    mousePosOnLastClick = [e.offsetX, e.offsetY];
+    mousePosOnLastClick = [e.offsetX / canvas.width, e.offsetY / canvas.height];
     //}
     e.preventDefault();
   });
@@ -258,8 +279,8 @@ async function setupFluid() {
   document.addEventListener("mouseup", (e) => {
     isMouseDown = false;
     pendingGust = true;
-    let offsetX = e.offsetX - mousePosOnLastClick[0];
-    let offsetY = e.offsetY - mousePosOnLastClick[1];
+    let offsetX = e.offsetX / canvas.width - mousePosOnLastClick[0];
+    let offsetY = e.offsetY / canvas.height - mousePosOnLastClick[1];
     gustDir = [offsetX, offsetY];
     console.log(gustDir);
     e.preventDefault();
@@ -273,21 +294,21 @@ async function setupFluid() {
   function drawMesh(index, x, y, scale, angle, drawMode = 0) {
     if (typeof scale === "number") scale = [scale, scale, scale];
     gl.uniformMatrix4fv(gl.getUniformLocation(shader3D, "vp"), false, [
-      1,
+      (2 * 9) / 16,
       0,
       0,
       0,
       0,
-      Math.cos(1.3),
-      -Math.sin(1.3),
+      Math.cos(1.3) * 1,
+      -Math.sin(1.3) * 1,
       0,
       0,
-      Math.sin(1.3),
-      Math.cos(1.3),
+      Math.sin(1.3) * 2,
+      Math.cos(1.3) * 2,
       0,
-      0,
-      0,
-      0,
+      -1, // x translation
+      -1, // y translation
+      0, // z translation
       1,
     ]);
     for (let i = 0; i < 2; i++) {
@@ -322,8 +343,10 @@ async function setupFluid() {
   }
 
   function drawWrapMesh(index, x, y, ...params) {
-    for (let dx = -2; dx < 4; dx += 2) {
-      for (let dy = -2; dy < 4; dy += 2) {
+    for (let dx = -16 / 9; dx < 2; dx += 16 / 9) {
+      for (let dy = -1; dy < 2; dy++) {
+        const factor = (n) => -Math.abs(n - 0.5) + 0.7;
+        if (Math.min(factor(((x + dx) * 9) / 16), factor(y + dy)) < 0) continue;
         drawMesh(index, x + dx, y + dy, ...params);
       }
     }
@@ -331,32 +354,86 @@ async function setupFluid() {
 
   const pixelPackBuffer = gl.createBuffer();
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pixelPackBuffer);
-  gl.bufferData(gl.PIXEL_PACK_BUFFER, 128 * 128 * 4 * 4, gl.DYNAMIC_READ);
+  gl.bufferData(
+    gl.PIXEL_PACK_BUFFER,
+    fluidTransferBufferSize * fluidTransferBufferSize * 4 * 4,
+    gl.DYNAMIC_READ
+  );
+  const colorPixelPackBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, colorPixelPackBuffer);
+  gl.bufferData(
+    gl.PIXEL_PACK_BUFFER,
+    fluidTransferBufferSize * fluidTransferBufferSize * 4 * 4,
+    gl.DYNAMIC_READ
+  );
 
-  const pixels = new Float32Array(128 * 128 * 4);
+  const pixels = new Float32Array(
+    fluidTransferBufferSize * fluidTransferBufferSize * 4
+  );
+  const colorPixels = new Float32Array(
+    fluidTransferBufferSize * fluidTransferBufferSize * 4
+  );
 
   function loop() {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcFb.fb);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, pixelDataFb.fb);
-    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
     gl.blitFramebuffer(
       0,
       0,
-      canvas.width,
-      canvas.height,
+      fluidDomainWidth,
+      fluidDomainHeight,
       0,
       0,
-      128,
-      128,
+      fluidTransferBufferSize,
+      fluidTransferBufferSize,
+      gl.COLOR_BUFFER_BIT,
+      gl.LINEAR
+    );
+    gl.readBuffer(gl.COLOR_ATTACHMENT1);
+    gl.drawBuffers([gl.NONE, gl.COLOR_ATTACHMENT1]);
+    gl.blitFramebuffer(
+      0,
+      0,
+      fluidDomainWidth,
+      fluidDomainHeight,
+      0,
+      0,
+      fluidTransferBufferSize,
+      fluidTransferBufferSize,
       gl.COLOR_BUFFER_BIT,
       gl.LINEAR
     );
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, pixelDataFb.fb);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pixelPackBuffer);
     gl.readBuffer(gl.COLOR_ATTACHMENT0);
-    gl.readPixels(0, 0, 128, 128, gl.RGBA, gl.FLOAT, 0);
+    gl.readPixels(
+      0,
+      0,
+      fluidTransferBufferSize,
+      fluidTransferBufferSize,
+      gl.RGBA,
+      gl.FLOAT,
+      0
+    );
+
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, colorPixelPackBuffer);
+    gl.readBuffer(gl.COLOR_ATTACHMENT1);
+    gl.readPixels(
+      0,
+      0,
+      fluidTransferBufferSize,
+      fluidTransferBufferSize,
+      gl.RGBA,
+      gl.FLOAT,
+      0
+    );
     const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
 
     rebindRenderTargets();
+
+    gl.viewport(0, 0, fluidDomainWidth, fluidDomainHeight);
 
     // advect
     gl.useProgram(advectShader);
@@ -391,12 +468,14 @@ async function setupFluid() {
       lastButton === 2 ? 1 : 0
     );
     gl.uniform2fv(gl.getUniformLocation(finalShader, "force_pos"), [
-      mousePosOnLastClick[0] / window.innerWidth,
-      1 - mousePosOnLastClick[1] / window.innerHeight,
+      mousePosOnLastClick[0],
+      1 - mousePosOnLastClick[1],
     ]);
+    let gustDirMag = Math.hypot(...gustDir);
+    if (gustDirMag == 0) gustDirMag = 1;
     gl.uniform2fv(gl.getUniformLocation(finalShader, "force_vec"), [
-      gustDir[0] * 0.5,
-      -gustDir[1] * 0.5,
+      (gustDir[0] / gustDirMag) * 2000 * Math.min(gustDirMag, 0.25),
+      (-gustDir[1] / gustDirMag) * 2000 * Math.min(gustDirMag, 0.25),
     ]);
     gustDir = [0, 0];
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -418,26 +497,26 @@ async function setupFluid() {
 
         gl.uniform1f(
           gl.getUniformLocation(circleShader, "force_factor"),
-          exploding ? 1.0 : 0
+          exploding ? 2.0 : 0
         );
         gl.uniform2f(
           gl.getUniformLocation(circleShader, "circle"),
-          unit.x,
+          (unit.x * 9) / 16,
           unit.y
         );
         gl.uniform4f(
           gl.getUniformLocation(circleShader, "radii"),
           0,
-          exploding ? 0.03 : 0.004,
+          exploding ? 0.03 : 0.003,
           0,
-          exploding ? 0.05 : 0
+          exploding ? 0.08 : 0
         );
         gl.uniform4f(
           gl.getUniformLocation(circleShader, "colors_change"),
           0,
-          exploding ? 1 : 0.3,
+          exploding ? 4 : 0.3,
           0,
-          exploding ? 1 : 0
+          exploding ? 2 : 0
         );
         gl.drawArrays(gl.TRIANGLES, 0, 6);
         swapRenderTargets();
@@ -450,31 +529,31 @@ async function setupFluid() {
     gl.uniform1f(gl.getUniformLocation(shader3D, "time"), time);
     gl.enable(gl.DEPTH_TEST);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, renderLayerFramebuffer);
+    gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0.7, 0.75, 0.85, 0.0);
     gl.clearDepth(1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     for (const unit of gameState.units) {
-      // console.log(unit.t);
       if (meshTable[unit.t] === undefined) continue;
 
-      const x = unit.x * 2 - 1;
-      const y = unit.y * 2 - 1;
+      const x = unit.x;
+      const y = unit.y;
       drawWrapMesh(meshTable[unit.t], x, y, scaleTable[unit.t], unit.r);
       switch (unit.t) {
         case UNIT_JP_SHIP:
         case UNIT_JP_BOARDING_SHIP:
-          drawWrapMesh(3, x, y, 0.2, 0, 3);
+          drawWrapMesh(3, x, y, 0.1, 0, 3);
           break;
         case UNIT_MN_SHIP:
         case UNIT_MN_CANNON_SHIP:
-          drawWrapMesh(3, x, y, 0.2, 0, 4);
+          drawWrapMesh(3, x, y, 0.1, 0, 4);
       }
       if (unit.mhp) {
         drawWrapMesh(
           4,
           x,
-          y - 0.15,
-          [(unit.hp / unit.mhp) * 0.1, 0.1, 0.1],
+          y - 0.08,
+          [(unit.hp / unit.mhp) * 0.06, 0.1, 0.04],
           0,
           5
         );
@@ -483,14 +562,16 @@ async function setupFluid() {
     if (isMouseDown) {
       drawMesh(
         2,
-        (mousePosOnLastClick[0] / window.innerWidth) * 2 - 1,
-        0 - ((mousePosOnLastClick[1] / window.innerHeight) * 2 - 1),
-        (1.0 *
-          Math.hypot(
-            mousePos[1] - mousePosOnLastClick[1],
-            mousePos[0] - mousePosOnLastClick[0]
-          )) /
-          window.innerWidth,
+        (mousePosOnLastClick[0] * 16) / 9,
+        1 - mousePosOnLastClick[1],
+        2.0 *
+          Math.min(
+            Math.hypot(
+              -(mousePos[1] - mousePosOnLastClick[1]),
+              mousePos[0] - mousePosOnLastClick[0]
+            ),
+            0.25
+          ),
         Math.atan2(
           -(mousePos[1] - mousePosOnLastClick[1]),
           mousePos[0] - mousePosOnLastClick[0]
@@ -527,10 +608,14 @@ async function setupFluid() {
 
     const max = gl.getParameter(gl.MAX_CLIENT_WAIT_TIMEOUT_WEBGL);
     gl.clientWaitSync(fence, gl.SYNC_FLUSH_COMMANDS_BIT, max);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pixelPackBuffer);
     gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, pixels);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, colorPixelPackBuffer);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, colorPixels);
 
     ///}
 
+    gl.viewport(0, 0, fluidDomainWidth, fluidDomainHeight);
     gl.lastMousePos = mousePos;
   }
 
@@ -538,6 +623,7 @@ async function setupFluid() {
     canvas,
     loop,
     pixels,
+    colorPixels,
   };
 }
 
@@ -567,26 +653,40 @@ const UNIT_MN_ARROW = 5;
 const UNIT_MN_BOMB = 6;
 
 const hitpointsTable = {
-  [UNIT_JP_SHIP]: 100,
-  [UNIT_JP_BOARDING_SHIP]: 50,
-  [UNIT_MN_SHIP]: 100,
-  [UNIT_MN_CANNON_SHIP]: 150,
+  [UNIT_JP_SHIP]: 1000,
+  [UNIT_JP_BOARDING_SHIP]: 500,
+  [UNIT_MN_SHIP]: 1000,
+  [UNIT_MN_CANNON_SHIP]: 1500,
 };
 
 const meshTable = {
   [UNIT_JP_SHIP]: 0,
+  [UNIT_JP_BOARDING_SHIP]: 0,
+  [UNIT_MN_SHIP]: 0,
   [UNIT_MN_CANNON_SHIP]: 1,
   [UNIT_JP_ARROW]: 2,
   [UNIT_MN_ARROW]: 2,
 };
 
 const scaleTable = {
-  [UNIT_JP_SHIP]: 0.1,
-  [UNIT_MN_CANNON_SHIP]: 0.2,
-  [UNIT_JP_ARROW]: 0.05,
-  [UNIT_MN_ARROW]: 0.05,
-  [UNIT_MN_BOMB]: 0.08,
+  [UNIT_JP_SHIP]: 0.035,
+  [UNIT_JP_BOARDING_SHIP]: 0.02,
+  [UNIT_MN_SHIP]: 0.035,
+  [UNIT_MN_CANNON_SHIP]: 0.05,
+  [UNIT_JP_ARROW]: 0.025,
+  [UNIT_MN_ARROW]: 0.025,
+  [UNIT_MN_BOMB]: 0.04,
 };
+
+function isJapaneseShip(id) {
+  return id === UNIT_JP_SHIP || id === UNIT_JP_BOARDING_SHIP;
+}
+
+function isShip(id) {
+  return (
+    isJapaneseShip(id) || id === UNIT_MN_SHIP || id === UNIT_MN_CANNON_SHIP
+  );
+}
 
 const $ = (...args) => document.querySelector(...args);
 
@@ -647,116 +747,204 @@ let screens = [
         };
         levelIndex++;
       }
-
-      console.log(lvldata);
     },
   },
   {
     html: `<div id="c"></div>`,
     init: async () => {
-      console.log(lvldata);
       gameState.units = lvldata[gameState.playingLevel].data.map((e) => ({
         t: e.type,
-        x: (e.pos % 16) / 16,
+        x: ((e.pos % 16) / 16) * (16 / 9),
         y: (e.pos >> 4) / 16,
         dx: 0,
         dy: 0,
         hp: hitpointsTable[e.type],
         mhp: hitpointsTable[e.type],
         r: 0,
+        timer: 0,
       }));
-
-      console.log("units", gameState.units);
 
       const c = $("#c");
 
-      const { canvas, loop, pixels } = await setupFluid(c);
+      const { canvas, loop, pixels, colorPixels } = await setupFluid(c);
 
-      game.appendChild(canvas);
+      c.appendChild(canvas);
 
       let time = 0;
 
       function gameLoop() {
         time++;
+
+        const getDirAndDist = (u1, u2) => {
+          const dir = Math.atan2(u2.y - u1.y, u2.x - u1.x);
+          const dist = Math.hypot(u2.y - u1.y, u2.x - u1.x);
+          return { dir, dist };
+        };
+
         // do game update
         for (const thisUnit of gameState.units) {
-          for (const otherUnit of gameState.units) {
-            const dir = Math.atan2(
-              otherUnit.y - thisUnit.y,
-              otherUnit.x - thisUnit.x
+          function getPixelRef(x, y) {
+            return (
+              (Math.floor((x * fluidTransferBufferSize * 9) / 16) +
+                Math.floor(y * fluidTransferBufferSize) *
+                  fluidTransferBufferSize) *
+              4
             );
-            const dist = Math.hypot(
-              otherUnit.y - thisUnit.y,
-              otherUnit.x - thisUnit.x
-            );
-            const setdir = () => {
-              let targetDir = dir;
-              if (targetDir + Math.PI * 2 - thisUnit.r < Math.PI) {
-                targetDir += Math.PI * 2;
+          }
+
+          const distToThisUnit = (u) =>
+            Math.hypot(u.x - thisUnit.x, u.y - thisUnit.y);
+
+          // get the closest unit to this unit of a given type
+          // used for enemy targeting
+          const closestUnit = (validTypes) =>
+            gameState.units
+              .filter((u) => validTypes.indexOf(u.t) != -1)
+              .filter((u) => {
+                // boarding ships aren't affected by smoke
+                if (thisUnit.type === UNIT_JP_BOARDING_SHIP) return true;
+
+                let x = thisUnit.x;
+                let y = thisUnit.y;
+
+                const STEPS = 1000;
+
+                let dx = (u.x - thisUnit.x) / STEPS;
+                let dy = (u.y - thisUnit.y) / STEPS;
+                let step = Math.hypot(dx, dy);
+
+                // do a raycast through the smoke
+                let smokeCover = 0;
+
+                let denseSmokePatches = 0;
+
+                for (let i = 0; i < STEPS; i++) {
+                  const ref = getPixelRef(
+                    x + Math.random() * 0.0,
+                    y + Math.random() * 0.0
+                  );
+                  const smoke = colorPixels[ref + 1];
+
+                  // dense smoke = auto fail
+                  if (smoke > 0.5) denseSmokePatches++;
+
+                  smokeCover += smoke * step;
+
+                  x += dx;
+                  y += dy;
+                }
+
+                console.log(smokeCover);
+
+                return smokeCover < 0.2 && denseSmokePatches < STEPS * 0.1;
+              })
+              .sort((a, b) => distToThisUnit(a) - distToThisUnit(b))[0];
+
+          // rotate ships toward their targets
+          const setdir = (dir) => {
+            let targetDir = dir;
+            if (targetDir + Math.PI * 2 - thisUnit.r < Math.PI) {
+              targetDir += Math.PI * 2;
+            }
+            thisUnit.r = targetDir * 0.01 + thisUnit.r * 0.99;
+            if (thisUnit.r > Math.PI * 2) thisUnit.r -= Math.PI * 2;
+            if (thisUnit.r < 0) thisUnit.r += Math.PI * 2;
+          };
+
+          // the target/enemy unit of a ship
+          let otherUnit = closestUnit(
+            isJapaneseShip(thisUnit.t)
+              ? [UNIT_MN_SHIP, UNIT_MN_CANNON_SHIP]
+              : [UNIT_JP_SHIP, UNIT_JP_BOARDING_SHIP]
+          );
+          const { dir, dist } = otherUnit
+            ? getDirAndDist(thisUnit, otherUnit)
+            : { dir: 0, dist: 0 };
+
+          if (isShip(thisUnit.t)) {
+            setdir(dir);
+            thisUnit.timer--;
+          }
+
+          const pixelRef = getPixelRef(thisUnit.x, thisUnit.y);
+
+          // targeting and attacking
+          switch (thisUnit.t) {
+            case UNIT_MN_SHIP:
+            case UNIT_JP_SHIP:
+              // no target --> don't do anything
+              if (!otherUnit) break;
+
+              if (thisUnit.timer < 0 && dist < 0.7) {
+                gameState.units.push({
+                  t:
+                    thisUnit.t === UNIT_JP_SHIP ? UNIT_JP_ARROW : UNIT_MN_ARROW,
+                  x: thisUnit.x,
+                  y: thisUnit.y,
+                  dx: Math.cos(dir) * 0.8,
+                  dy: Math.sin(dir) * 0.8,
+                  r: dir,
+                  hp: 650,
+                });
+                thisUnit.timer = 120;
               }
-              thisUnit.r = targetDir * 0.01 + thisUnit.r * 0.99;
-              if (thisUnit.r > Math.PI * 2) thisUnit.r -= Math.PI * 2;
-              if (thisUnit.r < 0) thisUnit.r += Math.PI * 2;
-            };
+
+              if (dist < 0.1) break;
+
+              thisUnit.dx += Math.cos(dir) * 0.0005;
+              thisUnit.dy += Math.sin(dir) * 0.0005;
+              thisUnit.r = dir;
+              break;
+
+            case UNIT_JP_BOARDING_SHIP:
+              // no target --> don't do anything
+              if (!otherUnit) break;
+
+              if (dist < 0.08) {
+                otherUnit.hp -= 1.5;
+              }
+
+              if (dist < 0.05) {
+                break;
+              }
+
+              thisUnit.dx += Math.cos(dir) * 0.0005;
+              thisUnit.dy += Math.sin(dir) * 0.0005;
+              thisUnit.r = dir;
+              break;
+            // mn units
+            case UNIT_MN_CANNON_SHIP: {
+              // no target --> don't do anything
+              if (!otherUnit) break;
+
+              const { dir, dist } = getDirAndDist(thisUnit, otherUnit);
+
+              if (thisUnit.timer < 0 && dist < 0.55) {
+                gameState.units.push({
+                  t: UNIT_MN_BOMB,
+                  x: thisUnit.x,
+                  y: thisUnit.y,
+                  dx: Math.cos(dir) * 0.4,
+                  dy: Math.sin(dir) * 0.4,
+                  r: dir,
+                  hp: 250,
+                });
+                thisUnit.timer = 360;
+              }
+
+              if (dist < 0.1) break;
+
+              thisUnit.dx += Math.cos(dir) * 0.0005;
+              thisUnit.dy += Math.sin(dir) * 0.0005;
+              break;
+            }
+          }
+
+          // handle collisions and projectiles
+          for (const otherUnit of gameState.units) {
+            const { dir, dist } = getDirAndDist(thisUnit, otherUnit);
             if (thisUnit === otherUnit) continue;
             switch (thisUnit.t) {
-              case UNIT_JP_SHIP:
-              case UNIT_JP_BOARDING_SHIP:
-                // only target enemies
-                if (
-                  [UNIT_MN_SHIP, UNIT_MN_CANNON_SHIP].indexOf(otherUnit.t) ===
-                  -1
-                )
-                  break;
-
-                setdir();
-
-                if (time % 60 === 1) {
-                  gameState.units.push({
-                    t: UNIT_JP_ARROW,
-                    x: thisUnit.x,
-                    y: thisUnit.y,
-                    dx: Math.cos(dir) * 0.8,
-                    dy: Math.sin(dir) * 0.8,
-                    r: dir,
-                    hp: 650,
-                  });
-                }
-
-                if (dist < 0.1) break;
-
-                thisUnit.dx += Math.cos(dir) * 0.0005;
-                thisUnit.dy += Math.sin(dir) * 0.0005;
-                thisUnit.r = dir;
-                break;
-              case UNIT_MN_SHIP:
-              case UNIT_MN_CANNON_SHIP:
-                // only target enemies
-                if (
-                  [UNIT_JP_SHIP, UNIT_JP_BOARDING_SHIP].indexOf(otherUnit.t) ===
-                  -1
-                )
-                  break;
-
-                setdir();
-
-                if (time % 240 === 1) {
-                  gameState.units.push({
-                    t: UNIT_MN_BOMB,
-                    x: thisUnit.x,
-                    y: thisUnit.y,
-                    dx: Math.cos(dir) * 0.6,
-                    dy: Math.sin(dir) * 0.6,
-                    r: dir,
-                    hp: 250,
-                  });
-                }
-
-                if (dist < 0.1) break;
-
-                thisUnit.dx += Math.cos(dir) * 0.0005;
-                thisUnit.dy += Math.sin(dir) * 0.0005;
-                break;
               case UNIT_JP_ARROW:
                 if (
                   [UNIT_MN_SHIP, UNIT_MN_CANNON_SHIP].indexOf(otherUnit.t) ===
@@ -764,7 +952,7 @@ let screens = [
                 )
                   break;
 
-                if (dist < 0.07 && thisUnit.hp > 1) {
+                if (dist < 0.03 && thisUnit.hp > 1) {
                   thisUnit.hp = 1;
                   otherUnit.hp -= 10;
                 }
@@ -777,21 +965,16 @@ let screens = [
                 )
                   break;
 
-                if (dist < 0.07 && thisUnit.hp > 2) {
+                if (dist < 0.03 && thisUnit.hp > 2) {
                   thisUnit.hp = 2;
-                  otherUnit.hp -= 10;
-                }
-
-                if (thisUnit.hp == 1) {
-                  if (dist < 0.2) {
-                    otherUnit.hp -= 5;
-                  }
+                  otherUnit.hp -= thisUnit.t === UNIT_MN_ARROW ? 10 : 0;
                 }
 
                 break;
             }
           }
 
+          // kill projectiles
           switch (thisUnit.t) {
             case UNIT_MN_BOMB:
             case UNIT_JP_ARROW:
@@ -801,22 +984,27 @@ let screens = [
 
           const mod = (x, n) => x - Math.floor(x / n) * n;
 
-          thisUnit.x = mod(thisUnit.x, 1);
-          thisUnit.y = mod(thisUnit.y, 1);
+          const explosion = colorPixels[pixelRef + 3];
 
-          const pixelRef =
-            (Math.floor(thisUnit.x * 128) +
-              Math.floor(thisUnit.y * 128) * 128) *
-            4;
-
-          const windX = pixels[pixelRef] * 0.5;
-          const windY = pixels[pixelRef + 1] * 0.5;
+          const windX = pixels[pixelRef] * 1.0;
+          const windY = pixels[pixelRef + 1] * 1.0;
 
           const drag =
             [UNIT_JP_ARROW, UNIT_MN_ARROW, UNIT_MN_BOMB].indexOf(thisUnit.t) ===
             -1
-              ? 0.015
+              ? 0.007
               : 0.003;
+
+          if (
+            [
+              UNIT_JP_SHIP,
+              UNIT_JP_BOARDING_SHIP,
+              UNIT_MN_SHIP,
+              UNIT_MN_CANNON_SHIP,
+            ].indexOf(thisUnit.t) != -1
+          ) {
+            thisUnit.hp -= 1 * Math.max(explosion - 0.1, 0);
+          }
 
           thisUnit.dx = thisUnit.dx * (1 - drag) + windX * drag;
           thisUnit.dy = thisUnit.dy * (1 - drag) + windY * drag;
@@ -824,6 +1012,9 @@ let screens = [
           thisUnit.y += thisUnit.dy * 0.01;
           thisUnit.dx *= 0.997;
           thisUnit.dy *= 0.997;
+
+          thisUnit.x = mod(thisUnit.x, 16 / 9);
+          thisUnit.y = mod(thisUnit.y, 1);
         }
         // do graphics update
         loop();
@@ -847,3 +1038,5 @@ async function updateGame() {
 }
 
 updateGame();
+
+window.gameState = gameState;

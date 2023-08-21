@@ -2,6 +2,7 @@
 precision highp float;
 
 in vec3 f_vpos;
+in vec3 original_vpos;
 
 out vec4 col;
 
@@ -14,7 +15,7 @@ void main() {
 
         // underwater
         if (f_vpos.y < 0.0) {
-            col = vec4(vec3(0.1, 0.2, 0.4) - f_vpos.y * 1.2, f_vpos.y);
+            col = vec4(vec3(0.1, 0.2, 0.4) - clamp(f_vpos.y * 7.5, -1.0, 0.0), f_vpos.y);
             return;
         }
 
@@ -31,28 +32,28 @@ void main() {
     
     // jp flag mode
     } else if (mode == 3) {
-        if (f_vpos.x < 0.0) {
-            col = vec4(0.4, 0.2, 0.0, f_vpos.y);
+        if (original_vpos.x < 0.0) {
+            col = vec4(0.4, 0.2, 0.0, original_vpos.y);
         } else {
-            col = vec4(0.8, 0.2, 0.1, f_vpos.y);
-            if (distance(f_vpos.xy, vec2(0.2, 0.75)) < 0.1) {
-                col = vec4(0.9, 0.8, 0.1, f_vpos.y);
+            col = vec4(0.8, 0.2, 0.1, original_vpos.y);
+            if (distance(original_vpos.xy, vec2(0.2, 0.75)) < 0.1) {
+                col = vec4(0.9, 0.8, 0.1, original_vpos.y);
             }
         }
 
     // mn flag mode
     // TODO: fix the flag
     } else if (mode == 4) {
-        if (f_vpos.x < 0.0) {
-            col = vec4(0.4, 0.2, 0.0, f_vpos.y);
+        if (original_vpos.x < 0.0) {
+            col = vec4(0.4, 0.2, 0.0, original_vpos.y);
         } else {
-            col = vec4(0.9, 0.2, 0.1, f_vpos.y);
-            float triangle_x = 0.25 * f_vpos.x + abs(f_vpos.y - 0.75);
+            col = vec4(0.9, 0.2, 0.1, original_vpos.y);
+            float triangle_x = 0.25 * original_vpos.x + abs(original_vpos.y - 0.75);
             if (triangle_x < 0.22) {
-                col = vec4(0.1, 0.2, 0.8, f_vpos.y);
+                col = vec4(0.1, 0.2, 0.8, original_vpos.y);
                 
-            if (distance(f_vpos.xy, vec2(0.2, 0.75)) < 0.08) {
-                col = vec4(0.9, 0.9, 0.9, f_vpos.y);
+            if (distance(original_vpos.xy, vec2(0.2, 0.75)) < 0.08) {
+                col = vec4(0.9, 0.9, 0.9, original_vpos.y);
             }
             } else if (triangle_x > 0.25) {
                 discard;

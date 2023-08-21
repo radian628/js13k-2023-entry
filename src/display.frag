@@ -17,40 +17,7 @@ out vec4 data;
 
 uniform vec2 rand_noise;
 
-float rand(vec2 co){
-    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-float smooth_step(float x) {
-    return x * x * (3.0 * 2.0 * x);
-}
-
-// float smoothlerp(float lo, float hi, float x) {
-//     return mix(lo, hi, smoothstep(x));
-// }
-
-float perlin(vec2 pos) {
-    vec2 base = floor(pos);
-    vec2 v1 = normalize(vec2(rand(base), rand(base - vec2(99.0, 99.0))) - vec2(0.5));
-    base += vec2(1.0, 0.0);
-    vec2 v2 = normalize(vec2(rand(base), rand(base - vec2(99.0, 99.0))) - vec2(0.5));
-    base += vec2(-1.0, 1.0);
-    vec2 v3 = normalize(vec2(rand(base), rand(base - vec2(99.0, 99.0))) - vec2(0.5));
-    base += vec2(1.0, 0.0);
-    vec2 v4 = normalize(vec2(rand(base), rand(base - vec2(99.0, 99.0))) - vec2(0.5));
-    
-    vec2 o1 = fract(pos);
-    vec2 o2 = o1 - vec2(1.0, 0.0);
-    vec2 o3 = o1 - vec2(0.0, 1.0);
-    vec2 o4 = o1 - vec2(1.0, 1.0);
-
-    // todo: figure out how to make this function not terrible
-    return mix(
-        mix(dot(o1, v1), dot(o2, v2), smoothstep(0.0, 1.0, fract(pos.x))),
-        mix(dot(o3, v3), dot(o4, v4), smoothstep(0.0, 1.0, fract(pos.x))),
-        smoothstep(0.0, 1.0, fract(pos.y))
-    );
-}
+/*PERLIN*/
 
 vec4 watercolor(vec4 v) {
     return floor(v) + pow(mod(1.0 - v, vec4(1.0)) * 0.85, vec4(2.0));
@@ -82,13 +49,22 @@ void main() {
     base_color = mix(base_color, vec3(0.0, 0.0, 0.2), 
             clamp((atmos_data.x + 0.5) * 0.3 + atmos_data.y, 0.0, 1.0));
 
+    float explosion_data
+         = clamp(quantized_atmos_data(pos - vec2(0.002, 0.006), 0.05).w, 0.0, 1.0);
+
     // explosion
-    base_color = mix(base_color, vec3(1.0, 0.5, 0.2), 
-            clamp(quantized_atmos_data(pos - vec2(0.002, 0.006), 0.05).w, 0.0, 1.0));
+    // base_color = mix(base_color, vec3(1.0, 0.5, 0.2), 
+    //         clamp(
+    //             , 0.0, 1.0));
+    base_color = vec3(
+        mix(base_color.x, 1.0, pow(explosion_data, 0.5)),
+        mix(base_color.y, 1.0, pow(explosion_data, 1.5)),
+        mix(base_color.z, 0.8, pow(explosion_data, 2.0))
+    );
 
     // smoke
     base_color = mix(base_color, vec3(0.25, 0.21, 0.2), 
-        clamp( quantized_atmos_data(pos - vec2(0.01, 0.03), 0.05).y * 1.5, 0.0, 1.0));
+        clamp( quantized_atmos_data(pos - vec2(0.01, 0.03), 0.05).y * 1.0, 0.0, 0.8));
 
     // clouds
     base_color = mix(base_color, vec3(1.0, 1.0, 1.0), 
